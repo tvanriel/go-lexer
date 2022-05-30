@@ -156,7 +156,7 @@ func (l *L) Next() rune {
 	return r
 }
 
-// Take receives a string containing all acceptable strings and will contine
+// Take receives a string containing all acceptable strings and will continue
 // over each consecutive character in the source until a token not in the given
 // string is encountered. This should be used to quickly pull token parts.
 func (l *L) Take(chars string) {
