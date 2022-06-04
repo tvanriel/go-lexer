@@ -280,3 +280,92 @@ func Test_LexerAccept(t *testing.T) {
 		}
 	}
 }
+
+var latinAlphabet = "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func LexWord(l *lexer.L) lexer.StateFunc {
+	if !l.CanTake(latinAlphabet) {
+		l.Error(fmt.Sprintf("Expected latin alphabet character, got %v", l.Peek()))
+	}
+	l.Take(latinAlphabet)
+	l.Emit(1)
+	if l.CanTake(whitespace) {
+		return LexWhitespace
+	}
+	if l.CanTake(punctuation) {
+		return LexPunctuation
+	}
+	l.Error("Expected Punctuation or Whitespace")
+	return nil
+}
+
+var punctuation = ",.\"'`"
+
+func LexPunctuation(l *lexer.L) lexer.StateFunc {
+	if !l.CanTake(punctuation) {
+		l.Error(fmt.Sprintf("Expected punctuation, got %v", l.Peek()))
+	}
+	l.Take(punctuation)
+	l.Emit(2)
+	if l.CanTake(whitespace) {
+		return LexWhitespace
+	}
+	if l.CanTake(latinAlphabet) {
+		return LexWord
+	}
+	l.Error("Expected Punctuation or Whitespace")
+	return nil
+}
+
+var whitespace = " \r\n\t"
+
+func LexWhitespace(l *lexer.L) lexer.StateFunc {
+	if !l.CanTake(whitespace) {
+		l.Error(fmt.Sprintf("Expected whitespace, got %v", l.Peek()))
+	}
+	l.Take(whitespace)
+	l.Emit(3)
+	if l.CanTake(punctuation) {
+		return LexPunctuation
+	}
+	if l.CanTake(latinAlphabet) {
+		return LexWord
+	}
+	l.Error("Expected Punctuation or Word")
+	return nil
+}
+
+var testtext = `Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Maecenas nec accumsan orci, id venenatis nunc.
+Donec et porttitor ligula, id suscipit nibh.
+Phasellus suscipit eu tortor rutrum molestie.
+Quisque quam elit, laoreet laoreet iaculis nec,
+ultrices quis elit.
+~
+Mauris efficitur laoreet sapien,
+in facilisis tortor feugiat eu.
+Nam lobortis lobortis lectus ac cursus.
+Pellentesque vehicula magna non molestie rutrum.
+`
+
+var expectedErrorText = `lexer:    4: Phasellus suscipit eu tortor rutrum molestie.
+lexer:    5: Quisque quam elit, laoreet laoreet iaculis nec,
+lexer:    6: ultrices quis elit.
+lexer:    7: ~
+lexer:     : ^ Expected Punctuation or Word
+lexer:    8: Mauris efficitur laoreet sapien,
+lexer:    9: in facilisis tortor feugiat eu.
+lexer:   10: Nam lobortis lobortis lectus ac cursus.
+`
+
+func Test_LexerErrorPrettyPrint(t *testing.T) {
+	l := lexer.New(testtext, LexWord)
+	l.ErrorHandler = func(e string) {
+		var err = l.PrettyError(e)
+		if err != expectedErrorText {
+			t.Errorf("Unexpected format for error:\n%v\n", err)
+		}
+	}
+	l.StartSync()
+
+}

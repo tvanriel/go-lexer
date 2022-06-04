@@ -29,6 +29,8 @@ package lexer
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"unicode/utf8"
 )
@@ -48,22 +50,19 @@ type Token struct {
 }
 
 type L struct {
-	source          string
-	start, position int
-	startState      StateFunc
-	Err             error
-	tokens          chan Token
-	ErrorHandler    func(e string)
-	rewind          runeStack
+	source       *sourcetext
+	startState   StateFunc
+	Err          error
+	tokens       chan Token
+	ErrorHandler func(e string)
+	rewind       runeStack
 }
 
 // New creates a returns a lexer ready to parse the given source code.
 func New(src string, start StateFunc) *L {
 	return &L{
-		source:     src,
+		source:     newSourceText(src),
 		startState: start,
-		start:      0,
-		position:   0,
 		rewind:     newRuneStack(),
 	}
 }
@@ -71,7 +70,7 @@ func New(src string, start StateFunc) *L {
 // Start begins executing the Lexer in an asynchronous manner (using a goroutine).
 func (l *L) Start() {
 	// Take half the string length as a buffer size.
-	buffSize := len(l.source) / 2
+	buffSize := l.source.len() / 2
 	if buffSize <= 0 {
 		buffSize = 1
 	}
@@ -81,7 +80,7 @@ func (l *L) Start() {
 
 func (l *L) StartSync() {
 	// Take half the string length as a buffer size.
-	buffSize := len(l.source) / 2
+	buffSize := l.source.len() / 2
 	if buffSize <= 0 {
 		buffSize = 1
 	}
@@ -91,7 +90,7 @@ func (l *L) StartSync() {
 
 // Current returns the value being being analyzed at this moment.
 func (l *L) Current() string {
-	return l.source[l.start:l.position]
+	return l.source.current()
 }
 
 // Emit will receive a token type and push a new token with the current analyzed
@@ -102,7 +101,7 @@ func (l *L) Emit(t TokenType) {
 		Value: l.Current(),
 	}
 	l.tokens <- tok
-	l.start = l.position
+	l.source.update()
 	l.rewind.clear()
 }
 
@@ -111,7 +110,7 @@ func (l *L) Emit(t TokenType) {
 // of the source being analyzed.
 func (l *L) Ignore() {
 	l.rewind.clear()
-	l.start = l.position
+	l.source.update()
 }
 
 // Peek performs a Next operation immediately followed by a Rewind returning the
@@ -129,11 +128,7 @@ func (l *L) Peek() rune {
 func (l *L) Rewind() {
 	r := l.rewind.pop()
 	if r > EOFRune {
-		size := utf8.RuneLen(r)
-		l.position -= size
-		if l.position < l.start {
-			l.position = l.start
-		}
+		l.source.rewind(r)
 	}
 }
 
@@ -144,13 +139,13 @@ func (l *L) Next() rune {
 		r rune
 		s int
 	)
-	str := l.source[l.position:]
+	str := l.source.fromHere()
 	if len(str) == 0 {
 		r, s = EOFRune, 0
 	} else {
 		r, s = utf8.DecodeRuneInString(str)
 	}
-	l.position += s
+	l.source.advance(s)
 	l.rewind.push(r)
 
 	return r
@@ -170,7 +165,7 @@ func (l *L) Take(chars string) {
 // Accept receives a string and checks if the following characters match
 // that string in order.
 func (l *L) Accept(chars string) bool {
-	return strings.HasPrefix(l.source[l.position:], chars)
+	return strings.HasPrefix(l.source.fromHere(), chars)
 }
 
 // CanTake receives a string and checks if the next rune is in that string.
@@ -188,26 +183,52 @@ func (l *L) NextToken() (*Token, bool) {
 	}
 }
 
-// Get the line number and position in that line the lexer position is currently on.
-func getPos(l *L) (int, int) {
-	untilNow := l.source[:l.position]
-	linenum := strings.Count(untilNow, "\n") + 1
-	lastNewLineIndex := strings.LastIndex(untilNow, "\n")
-	posInLine := l.position - lastNewLineIndex
-	return linenum, posInLine
-}
-
 // Partial yyLexer implementation
 
 func (l *L) Error(e string) {
 	if l.ErrorHandler != nil {
 
-		linenum, pos := getPos(l)
+		linenum, pos := l.source.getPos()
 		l.Err = fmt.Errorf("lexer (pos=%d,%d): %v", linenum, pos, e)
 		l.ErrorHandler(e)
 	} else {
 		panic(e)
 	}
+}
+
+func (l *L) PrettyError(e string) string {
+	var sb strings.Builder
+	line, pos := l.source.getPos()
+	before, linetext, after, beforeStart, afterStart := l.source.getContext(line - 1)
+
+	if len(before) > 0 {
+		i := beforeStart + 1
+		for _, l := range before {
+			sb.WriteString(fmt.Sprintf("lexer: %4d: %s\n", i, l))
+			i++
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("lexer: %4d: %s\n", line, linetext))
+	sb.WriteString(fmt.Sprintf("lexer:     :%s^ %s\n", strings.Repeat(" ", pos), e))
+
+	if len(after) > 0 {
+		i := afterStart + 1
+		for _, l := range after {
+			sb.WriteString(fmt.Sprintf("lexer: %4d: %s\n", i, l))
+			i++
+		}
+	}
+
+	return sb.String()
+}
+
+func (l *L) writeError(to io.Writer, e string) {
+	fmt.Fprint(to, l.PrettyError(e))
+}
+
+func (l *L) PrintError(e string) {
+	l.writeError(os.Stdout, e)
 }
 
 // Private methods
