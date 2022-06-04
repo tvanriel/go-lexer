@@ -197,7 +197,7 @@ func Test_LexerError(t *testing.T) {
 		return
 	}
 
-	if l.Err.Error() != "unexpected token '1'" {
+	if l.Err.Error() != "lexer (pos=1,2): unexpected token '1'" {
 		t.Errorf("Expected specific message from error, but got %q", l.Err.Error())
 		return
 	}

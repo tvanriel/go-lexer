@@ -28,7 +28,7 @@
 package lexer
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -188,11 +188,22 @@ func (l *L) NextToken() (*Token, bool) {
 	}
 }
 
+// Get the line number and position in that line the lexer position is currently on.
+func getPos(l *L) (int, int) {
+	untilNow := l.source[:l.position]
+	linenum := strings.Count(untilNow, "\n") + 1
+	lastNewLineIndex := strings.LastIndex(untilNow, "\n")
+	posInLine := l.position - lastNewLineIndex
+	return linenum, posInLine
+}
+
 // Partial yyLexer implementation
 
 func (l *L) Error(e string) {
 	if l.ErrorHandler != nil {
-		l.Err = errors.New(e)
+
+		linenum, pos := getPos(l)
+		l.Err = fmt.Errorf("lexer (pos=%d,%d): %v", linenum, pos, e)
 		l.ErrorHandler(e)
 	} else {
 		panic(e)
