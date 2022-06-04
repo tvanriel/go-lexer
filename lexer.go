@@ -167,6 +167,17 @@ func (l *L) Take(chars string) {
 	l.Rewind() // last next wasn't a match
 }
 
+// Accept receives a string and checks if the following characters match
+// that string in order.
+func (l *L) Accept(chars string) bool {
+	return strings.HasPrefix(l.source[l.position:], chars)
+}
+
+// CanTake receives a string and checks if the next rune is in that string.
+func (l *L) CanTake(chars string) bool {
+	return strings.ContainsRune(chars, l.Peek())
+}
+
 // NextToken returns the next token from the lexer and a value to denote whether
 // or not the token is finished.
 func (l *L) NextToken() (*Token, bool) {

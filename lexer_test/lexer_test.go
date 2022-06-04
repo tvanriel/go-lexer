@@ -202,3 +202,81 @@ func Test_LexerError(t *testing.T) {
 		return
 	}
 }
+
+func Test_LexerCanTake(t *testing.T) {
+	l := lexer.New("123.hello",
+		func(l *lexer.L) lexer.StateFunc {
+
+			if l.CanTake("1") {
+				l.Take("1")
+				l.Emit(NumberToken)
+				return nil
+			}
+
+			l.Error("CanTake failed")
+			return nil
+		},
+	)
+
+	l.Start()
+	l.NextToken()
+}
+
+func acceptNumber(number string) lexer.StateFunc {
+	return func(l *lexer.L) lexer.StateFunc {
+
+		if l.Accept(number) {
+			l.Take("0123456789")
+			l.Emit(NumberToken)
+			return nil
+		}
+
+		l.Error("CanTake failed")
+		return nil
+	}
+}
+
+func Test_LexerAccept(t *testing.T) {
+	shouldSucceed := []*lexer.L{
+		lexer.New("123.hello", acceptNumber("123")),
+		lexer.New("2234234.hello", acceptNumber("2234234")),
+		lexer.New("3.hello", acceptNumber("3")),
+		lexer.New("48765.hello", acceptNumber("48765")),
+		lexer.New("51.hello", acceptNumber("51")),
+	}
+
+	shouldFail := []*lexer.L{
+		lexer.New("1.hello", acceptNumber("0")),
+	}
+
+	for _, l := range shouldSucceed {
+		l.Start()
+		tok, done := l.NextToken()
+		if tok == nil {
+			t.Errorf("Expected non-nil token but got nil")
+			return
+		}
+		if done {
+			t.Errorf("Expected lexer to accept more tokens but got done")
+			return
+		}
+	}
+
+	for _, l := range shouldFail {
+		l.ErrorHandler = func(string) {}
+		l.Start()
+		tok, done := l.NextToken()
+		if tok != nil {
+			t.Errorf("Expected nil token")
+			return
+		}
+		if !done {
+			t.Errorf("Expected lexer to accept more tokens but got done")
+			return
+		}
+		if l.Err == nil {
+			t.Errorf("Expected err to be set but got nil")
+			return
+		}
+	}
+}
