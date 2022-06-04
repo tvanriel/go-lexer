@@ -15,7 +15,7 @@
 //     func StringState(l *lexer.L) lexer.StateFunc {
 //             l.Next() // eat starting "
 //             l.Ignore() // drop current value
-//             while l.Peek() != '"' {
+//             for l.Peek() != '"' {
 //                     l.Next()
 //             }
 //             l.Emit(StringToken)
