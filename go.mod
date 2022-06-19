@@ -1,3 +1,3 @@
-module github.com/bbuck/go-lexer
+module github.com/tvanriel/go-lexer
 
-go 1.11
+go 1.18
